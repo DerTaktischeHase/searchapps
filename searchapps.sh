@@ -15,24 +15,26 @@ have_cmd() {
 list_pkg_apps() {
     out=""
 
-    # dpkg / apt (Debian/Ubuntu)
-    if command -v dpkg-query >/dev/null 2>&1; then
+    # dpkg / apt
+    if have_cmd dpkg-query; then
         out="$out\n$(dpkg-query -W -f='${Package}\n' 2>/dev/null)"
+    elif have_cmd dpkg; then
+        out="$out\n$(dpkg -l 2>/dev/null | awk 'NR>5 {print $2}')"
     fi
 
     # snap
-    if command -v snap >/dev/null 2>&1; then
+    if have_cmd snap; then
         out="$out\n$(snap list 2>/dev/null | awk 'NR>1 {print $1}')"
     fi
 
     # flatpak
-    if command -v flatpak >/dev/null 2>&1; then
+    if have_cmd flatpak; then
         out="$out\n$(flatpak list --app --columns=application 2>/dev/null)"
     fi
 
-    # ausgeben, sortiert
     printf "%s\n" "$out" | grep -v '^$' | sort -u
 }
+
 
 
 search_pkg_apps() {
