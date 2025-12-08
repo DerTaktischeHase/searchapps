@@ -1,6 +1,6 @@
 ### searchapps
 
-#`searchapps` ist ein leichtgewichtiges CLI-Tool für Linux, mit dem du installierte Programme schnell durchsuchen kannst.  
+`searchapps` ist ein leichtgewichtiges CLI-Tool für Linux, mit dem du installierte Programme schnell durchsuchen kannst.  
 Unterstützt werden:
 
 - **APT / dpkg** (Debian, Ubuntu, Linux Mint …)  
