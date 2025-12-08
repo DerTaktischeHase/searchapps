@@ -5,7 +5,6 @@ SEARCHAPPS_DIR="${SEARCHAPPS_DIR:-$HOME/.searchapps}"
 CONFIG_FILE="$SEARCHAPPS_DIR/config"
 
 # -------------------------------------------------------------------
-
 # Sammle alle App-Befehle aus .desktop Dateien
 list_desktop_execs() {
     for dir in /usr/share/applications "$HOME/.local/share/applications"; do
@@ -14,11 +13,16 @@ list_desktop_execs() {
         for f in "$dir"/*.desktop; do
             [ -f "$f" ] || continue
 
-            # Exec= line
+            # Exec= line holen
             exec=$(grep -m1 '^Exec=' "$f" 2>/dev/null | sed 's/^Exec=//')
 
-            # Erstes Wort extrahieren (Befehl)
+            # Erstes Wort (Befehl + evtl. Pfad)
             exec=$(printf '%s\n' "$exec" | awk '{print $1}')
+
+            [ -n "$exec" ] || continue
+
+            # Wenn Pfad enthalten → nur basename nehmen
+            exec=$(basename "$exec")
 
             [ -n "$exec" ] || continue
 
@@ -104,25 +108,3 @@ case "$1" in
         exit 0
         ;;
     --uninstall)
-        do_uninstall
-        exit 0
-        ;;
-    --all)
-        shift
-        if [ -n "$1" ]; then
-            search_cli_apps "$1"
-        else
-            list_cli_apps
-        fi
-        exit 0
-        ;;
-esac
-
-# Keine Argumente → alle Apps anzeigen
-if [ -z "$1" ]; then
-    list_desktop_execs
-    exit 0
-fi
-
-# Mit Suchbegriff
-search_desktop_execs "$1"
