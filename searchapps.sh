@@ -13,23 +13,27 @@ have_cmd() {
 # Liste installierter "Apps" aus Paketmanagern
 # (dpkg/apt, snap, flatpak)
 list_pkg_apps() {
-    # dpkg / apt (Debian/Ubuntu & Derivate)
-    if have_cmd dpkg-query; then
-        dpkg-query -W -f='${Package}\n' 2>/dev/null
-    elif have_cmd dpkg; then
-        dpkg -l 2>/dev/null | awk 'NR>5 {print $2}'
+    out=""
+
+    # dpkg / apt (Debian/Ubuntu)
+    if command -v dpkg-query >/dev/null 2>&1; then
+        out="$out\n$(dpkg-query -W -f='${Package}\n' 2>/dev/null)"
     fi
 
     # snap
-    if have_cmd snap; then
-        snap list 2>/dev/null | awk 'NR>1 {print $1}'
+    if command -v snap >/dev/null 2>&1; then
+        out="$out\n$(snap list 2>/dev/null | awk 'NR>1 {print $1}')"
     fi
 
     # flatpak
-    if have_cmd flatpak; then
-        flatpak list --app --columns=application 2>/dev/null
+    if command -v flatpak >/dev/null 2>&1; then
+        out="$out\n$(flatpak list --app --columns=application 2>/dev/null)"
     fi
-} | sort -u
+
+    # ausgeben, sortiert
+    printf "%s\n" "$out" | grep -v '^$' | sort -u
+}
+
 
 search_pkg_apps() {
     pattern=$1
