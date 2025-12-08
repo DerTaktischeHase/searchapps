@@ -1,54 +1,39 @@
 #!/bin/sh
 
-# Main script for the 'searchapps' CLI tool
-
+# Default config dir
 SEARCHAPPS_DIR="${SEARCHAPPS_DIR:-$HOME/.searchapps}"
 CONFIG_FILE="$SEARCHAPPS_DIR/config"
 
-# --- Desktop-Apps aus .desktop-Dateien lesen ---
+# -------------------------------------------------------------------
 
-list_desktop_apps() {
-    # Format der Ausgabe: EXEC<TAB>NAME
+# Sammle alle App-Befehle aus .desktop Dateien
+list_desktop_execs() {
     for dir in /usr/share/applications "$HOME/.local/share/applications"; do
         [ -d "$dir" ] || continue
-        # alle .desktop-Dateien
+
         for f in "$dir"/*.desktop; do
             [ -f "$f" ] || continue
 
-            # Name= (erste Zeile)
-            name=$(grep -m1 '^Name=' "$f" 2>/dev/null | sed 's/^Name=//')
-            # Exec= (erste Zeile)
+            # Exec= line
             exec=$(grep -m1 '^Exec=' "$f" 2>/dev/null | sed 's/^Exec=//')
 
-            # Exec auf das eigentliche Kommando kürzen (erstes Wort, ohne %U etc.)
-            # Beispiele: "code --unity" -> "code", "discord %U" -> "discord"
+            # Erstes Wort extrahieren (Befehl)
             exec=$(printf '%s\n' "$exec" | awk '{print $1}')
 
             [ -n "$exec" ] || continue
-            [ -n "$name" ] || name="$exec"
 
-            # Nur einmal pro (exec,name)-Kombi
-            printf '%s\t%s\n' "$exec" "$name"
+            printf '%s\n' "$exec"
         done
     done | sort -u
 }
 
-print_desktop_apps_pretty() {
-    # einfache Ausgabe: "exec - Name"
-    list_desktop_apps | while IFS="$(printf '\t')" read -r exec name; do
-        printf '%s - %s\n' "$exec" "$name"
-    done
-}
-
-search_desktop_apps() {
+# Suche innerhalb der Desktop-Befehle
+search_desktop_execs() {
     pattern=$1
-    list_desktop_apps | grep -iF -- "$pattern" | while IFS="$(printf '\t')" read -r exec name; do
-        printf '%s - %s\n' "$exec" "$name"
-    done
+    list_desktop_execs | grep -iF -- "$pattern"
 }
 
-# --- Alte Logik: alle PATH-Executables (für --all) ---
-
+# Alte (komplette) PATH-Suche (nur für --all)
 list_cli_apps() {
     old_ifs=$IFS
     IFS=:
@@ -68,78 +53,76 @@ search_cli_apps() {
     list_cli_apps | grep -iF -- "$pattern"
 }
 
+# -------------------------------------------------------------------
+
 show_help() {
-    cat <<EOF
-searchapps - search installed applications on your system
+cat <<EOF
+searchapps - list and search installed applications
 
 Usage:
-  searchapps                   List desktop applications (.desktop files)
-  searchapps <pattern>         Search desktop apps by name or exec (case-insensitive)
-  searchapps --all <pattern>   Search all executable commands in your PATH (old behavior)
-  searchapps --help            Show this help message
-  searchapps --uninstall       Remove searchapps from this system
+  searchapps               List application commands (from .desktop files)
+  searchapps <pattern>     Search apps by command (case-insensitive)
+  searchapps --all <pat>   Search ALL executables in your PATH
+  searchapps --help        Show help
+  searchapps --uninstall   Remove searchapps
 
 Examples:
   searchapps
   searchapps code
-  searchapps discord
+  searchapps fire
   searchapps --all grep
 EOF
 }
 
+# -------------------------------------------------------------------
+
 do_uninstall() {
-    # Konfig lesen, falls vorhanden
     if [ -f "$CONFIG_FILE" ]; then
-        # shellcheck disable=SC1090
         . "$CONFIG_FILE"
     fi
 
     echo "Uninstalling searchapps..."
 
-    # Wrapper/Executable entfernen
     if [ -n "$SEARCHAPPS_BIN" ] && [ -f "$SEARCHAPPS_BIN" ]; then
-        echo "  Removing executable: $SEARCHAPPS_BIN"
         rm -f "$SEARCHAPPS_BIN"
+        echo "Removed executable: $SEARCHAPPS_BIN"
     fi
 
-    # Hauptordner entfernen
     if [ -d "$SEARCHAPPS_DIR" ]; then
-        echo "  Removing directory: $SEARCHAPPS_DIR"
         rm -rf "$SEARCHAPPS_DIR"
+        echo "Removed directory: $SEARCHAPPS_DIR"
     fi
 
-    echo "searchapps has been uninstalled."
+    echo "Done."
 }
 
-# --- Argument-Handling ---
+# -------------------------------------------------------------------
 
-if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
-    show_help
-    exit 0
-fi
+case "$1" in
+    --help|-h)
+        show_help
+        exit 0
+        ;;
+    --uninstall)
+        do_uninstall
+        exit 0
+        ;;
+    --all)
+        shift
+        if [ -n "$1" ]; then
+            search_cli_apps "$1"
+        else
+            list_cli_apps
+        fi
+        exit 0
+        ;;
+esac
 
-if [ "$1" = "--uninstall" ]; then
-    do_uninstall
-    exit 0
-fi
-
-if [ "$1" = "--all" ]; then
-    # alte CLI-Variante verwenden
-    shift
-    if [ -z "$1" ]; then
-        # keine Suche → alles ausgeben
-        list_cli_apps
-    else
-        search_cli_apps "$1"
-    fi
-    exit 0
-fi
-
-# Kein Argument → alle Desktop-Apps anzeigen
+# Keine Argumente → alle Apps anzeigen
 if [ -z "$1" ]; then
-    print_desktop_apps_pretty
+    list_desktop_execs
     exit 0
 fi
 
-# Sonst: Desktop-Apps nach Pattern durchsuchen
-search_desktop_apps "$1"
+# Mit Suchbegriff
+search_desktop_execs "$1"
