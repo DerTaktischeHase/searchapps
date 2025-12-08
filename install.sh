@@ -12,15 +12,25 @@ DEFAULT_BIN_DIR="$HOME/.local/bin"
 echo "=== searchapps installer ==="
 echo
 
-# Installationsverzeichnis abfragen
-printf "Install directory for searchapps.sh [%s]: " "$DEFAULT_INSTALL_DIR"
-read -r INSTALL_DIR
-[ -n "$INSTALL_DIR" ] || INSTALL_DIR="$DEFAULT_INSTALL_DIR"
+# Prüfen, ob stdin ein Terminal ist (interaktiv) oder aus einer Pipe kommt (curl | sh)
+if [ -t 0 ]; then
+    # Interaktiver Modus
+    printf "Install directory for searchapps.sh [%s]: " "$DEFAULT_INSTALL_DIR"
+    read -r INSTALL_DIR
+    [ -n "$INSTALL_DIR" ] || INSTALL_DIR="$DEFAULT_INSTALL_DIR"
 
-# Bin-Verzeichnis (für das 'searchapps' Kommando) abfragen
-printf "Directory for the 'searchapps' executable (must be in PATH) [%s]: " "$DEFAULT_BIN_DIR"
-read -r BIN_DIR
-[ -n "$BIN_DIR" ] || BIN_DIR="$DEFAULT_BIN_DIR"
+    printf "Directory for the 'searchapps' executable (must be in PATH) [%s]: " "$DEFAULT_BIN_DIR"
+    read -r BIN_DIR
+    [ -n "$BIN_DIR" ] || BIN_DIR="$DEFAULT_BIN_DIR"
+else
+    # Nicht-interaktiv (z.B. curl | sh) → Defaults benutzen
+    INSTALL_DIR="$DEFAULT_INSTALL_DIR"
+    BIN_DIR="$DEFAULT_BIN_DIR"
+    echo "Non-interactive mode detected (probably curl | sh)."
+    echo "Using defaults:"
+    echo "  Install dir: $INSTALL_DIR"
+    echo "  Bin dir:     $BIN_DIR"
+fi
 
 BIN_PATH="$BIN_DIR/searchapps"
 
