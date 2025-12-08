@@ -5,36 +5,35 @@ SEARCHAPPS_DIR="${SEARCHAPPS_DIR:-$HOME/.searchapps}"
 CONFIG_FILE="$SEARCHAPPS_DIR/config"
 
 # -------------------------------------------------------------------
-# Sammle alle App-Befehle aus .desktop Dateien
-list_desktop_execs() {
-    for dir in /usr/share/applications "$HOME/.local/share/applications"; do
-        [ -d "$dir" ] || continue
-
-        for f in "$dir"/*.desktop; do
-            [ -f "$f" ] || continue
-
-            # Exec= line holen
-            exec=$(grep -m1 '^Exec=' "$f" 2>/dev/null | sed 's/^Exec=//')
-
-            # Erstes Wort (Befehl + evtl. Pfad)
-            exec=$(printf '%s\n' "$exec" | awk '{print $1}')
-
-            [ -n "$exec" ] || continue
-
-            # Wenn Pfad enthalten → nur basename nehmen
-            exec=$(basename "$exec")
-
-            [ -n "$exec" ] || continue
-
-            printf '%s\n' "$exec"
-        done
-    done | sort -u
+# Prüfen, ob ein Kommando existiert
+have_cmd() {
+    command -v "$1" >/dev/null 2>&1
 }
 
-# Suche innerhalb der Desktop-Befehle
-search_desktop_execs() {
+# Liste installierter "Apps" aus Paketmanagern
+# (dpkg/apt, snap, flatpak)
+list_pkg_apps() {
+    # dpkg / apt (Debian/Ubuntu & Derivate)
+    if have_cmd dpkg-query; then
+        dpkg-query -W -f='${Package}\n' 2>/dev/null
+    elif have_cmd dpkg; then
+        dpkg -l 2>/dev/null | awk 'NR>5 {print $2}'
+    fi
+
+    # snap
+    if have_cmd snap; then
+        snap list 2>/dev/null | awk 'NR>1 {print $1}'
+    fi
+
+    # flatpak
+    if have_cmd flatpak; then
+        flatpak list --app --columns=application 2>/dev/null
+    fi
+} | sort -u
+
+search_pkg_apps() {
     pattern=$1
-    list_desktop_execs | grep -iF -- "$pattern"
+    list_pkg_apps | grep -iF -- "$pattern"
 }
 
 # Alte (komplette) PATH-Suche (nur für --all)
@@ -61,20 +60,25 @@ search_cli_apps() {
 
 show_help() {
 cat <<EOF
-searchapps - list and search installed applications
+searchapps - list and search installed applications/packages
+
+Standardquelle:
+  - Debian/Ubuntu Pakete (dpkg/apt)
+  - snap Pakete
+  - flatpak Apps (falls vorhanden)
 
 Usage:
-  searchapps               List application commands (from .desktop files)
-  searchapps <pattern>     Search apps by command (case-insensitive)
-  searchapps --all <pat>   Search ALL executables in your PATH
+  searchapps               List installed packages/apps (from dpkg, snap, flatpak)
+  searchapps <pattern>     Search by package/app name (case-insensitive)
+  searchapps --all <pat>   Search ALL executables in your PATH (old behaviour)
   searchapps --help        Show help
   searchapps --uninstall   Remove searchapps
 
 Examples:
   searchapps
   searchapps code
-  searchapps fire
-  searchapps --all grep
+  searchapps firefox
+  searchapps --all bash
 EOF
 }
 
@@ -108,3 +112,25 @@ case "$1" in
         exit 0
         ;;
     --uninstall)
+        do_uninstall
+        exit 0
+        ;;
+    --all)
+        shift
+        if [ -n "$1" ]; then
+            search_cli_apps "$1"
+        else
+            list_cli_apps
+        fi
+        exit 0
+        ;;
+esac
+
+# Keine Argumente → alle Paket-/Appnamen anzeigen
+if [ -z "$1" ]; then
+    list_pkg_apps
+    exit 0
+fi
+
+# Mit Suchbegriff
+search_pkg_apps "$1"
