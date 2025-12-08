@@ -1,49 +1,34 @@
 #!/bin/sh
 
-# Default config dir
+# === SEARCHAPPS: apt/snap/flatpak + optional --all ===
+
 SEARCHAPPS_DIR="${SEARCHAPPS_DIR:-$HOME/.searchapps}"
 CONFIG_FILE="$SEARCHAPPS_DIR/config"
 
-# -------------------------------------------------------------------
-# Prüfen, ob ein Kommando existiert
-have_cmd() {
-    command -v "$1" >/dev/null 2>&1
+# ---------------------------------------------------------
+# Quelle 1: APT/dpkg
+get_apt_apps() {
+    if command -v dpkg >/dev/null 2>&1; then
+        dpkg --get-selections 2>/dev/null | awk '{print $1}'
+    fi
 }
 
-# Liste installierter "Apps" aus Paketmanagern
-# (dpkg/apt, snap, flatpak)
-list_pkg_apps() {
-    out=""
-
-    # dpkg / apt
-    if have_cmd dpkg-query; then
-        out="$out\n$(dpkg-query -W -f='${Package}\n' 2>/dev/null)"
-    elif have_cmd dpkg; then
-        out="$out\n$(dpkg -l 2>/dev/null | awk 'NR>5 {print $2}')"
+# Quelle 2: SNAP
+get_snap_apps() {
+    if command -v snap >/dev/null 2>&1; then
+        snap list 2>/dev/null | awk 'NR>1 {print $1}'
     fi
-
-    # snap
-    if have_cmd snap; then
-        out="$out\n$(snap list 2>/dev/null | awk 'NR>1 {print $1}')"
-    fi
-
-    # flatpak
-    if have_cmd flatpak; then
-        out="$out\n$(flatpak list --app --columns=application 2>/dev/null)"
-    fi
-
-    printf "%s\n" "$out" | grep -v '^$' | sort -u
 }
 
-
-
-search_pkg_apps() {
-    pattern=$1
-    list_pkg_apps | grep -iF -- "$pattern"
+# Quelle 3: Flatpak
+get_flatpak_apps() {
+    if command -v flatpak >/dev/null 2>&1; then
+        flatpak list --columns=application 2>/dev/null
+    fi
 }
 
-# Alte (komplette) PATH-Suche (nur für --all)
-list_cli_apps() {
+# Alle Executables im PATH (für --all)
+get_path_apps() {
     old_ifs=$IFS
     IFS=:
     for dir in $PATH; do
@@ -53,43 +38,12 @@ list_cli_apps() {
             [ -x "$f" ] || continue
             basename "$f"
         done
-    done 2>/dev/null | sort -u
+    done 2>/dev/null
     IFS=$old_ifs
 }
 
-search_cli_apps() {
-    pattern=$1
-    list_cli_apps | grep -iF -- "$pattern"
-}
-
-# -------------------------------------------------------------------
-
-show_help() {
-cat <<EOF
-searchapps - list and search installed applications/packages
-
-Standardquelle:
-  - Debian/Ubuntu Pakete (dpkg/apt)
-  - snap Pakete
-  - flatpak Apps (falls vorhanden)
-
-Usage:
-  searchapps               List installed packages/apps (from dpkg, snap, flatpak)
-  searchapps <pattern>     Search by package/app name (case-insensitive)
-  searchapps --all <pat>   Search ALL executables in your PATH (old behaviour)
-  searchapps --help        Show help
-  searchapps --uninstall   Remove searchapps
-
-Examples:
-  searchapps
-  searchapps code
-  searchapps firefox
-  searchapps --all bash
-EOF
-}
-
-# -------------------------------------------------------------------
-
+# ---------------------------------------------------------
+# Uninstall
 do_uninstall() {
     if [ -f "$CONFIG_FILE" ]; then
         . "$CONFIG_FILE"
@@ -107,36 +61,56 @@ do_uninstall() {
         echo "Removed directory: $SEARCHAPPS_DIR"
     fi
 
-    echo "Done."
+    exit 0
 }
 
-# -------------------------------------------------------------------
+# ---------------------------------------------------------
+# Argument Handling: Optionen zuerst
 
 case "$1" in
-    --help|-h)
-        show_help
-        exit 0
-        ;;
     --uninstall)
         do_uninstall
+        ;;
+    --help|-h)
+        cat <<EOF
+searchapps - list/search installed apt/snap/flatpak applications
+
+Usage:
+  searchapps               # list all installed apps (apt/snap/flatpak)
+  searchapps <pattern>     # search installed apps
+  searchapps --all <pat>   # search ALL executables in your PATH
+  searchapps --help
+  searchapps --uninstall
+EOF
         exit 0
         ;;
     --all)
         shift
-        if [ -n "$1" ]; then
-            search_cli_apps "$1"
+        all_path_apps=$(get_path_apps | sort -u)
+        if [ -z "$1" ]; then
+            printf "%s\n" "$all_path_apps"
         else
-            list_cli_apps
+            printf "%s\n" "$all_path_apps" | grep -iF "$1"
         fi
         exit 0
         ;;
 esac
 
-# Keine Argumente → alle Paket-/Appnamen anzeigen
+# ---------------------------------------------------------
+# DATEN AUS PAKETMANAGERN SAMMELN
+
+all_apps=$(
+    get_apt_apps
+    get_snap_apps
+    get_flatpak_apps
+)
+
+# Kein Argument → komplette Liste
 if [ -z "$1" ]; then
-    list_pkg_apps
+    printf "%s\n" "$all_apps" | sort -u
     exit 0
 fi
 
-# Mit Suchbegriff
-search_pkg_apps "$1"
+# Mit Argument → Suche in Paket/App-Namen
+pattern=$1
+printf "%s\n" "$all_apps" | sort -u | grep -iF "$pattern"
