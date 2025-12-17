@@ -61,7 +61,7 @@ case "${1:-}" in
     exit 0
     ;;
   "")
-    echo "Usage: searchapps <Suchbegriff>" >&2
+    show_help() >&2
     exit 1
     ;;
 esac
