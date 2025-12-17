@@ -1,116 +1,88 @@
 #!/bin/sh
+# searchapps: sucht nach Programmen/Commands im PATH (case-insensitive)
+# Usage: searchapps <Suchbegriff>
 
-# === SEARCHAPPS: apt/snap/flatpak + optional --all ===
+set -eu
 
-SEARCHAPPS_DIR="${SEARCHAPPS_DIR:-$HOME/.searchapps}"
-CONFIG_FILE="$SEARCHAPPS_DIR/config"
-
-# ---------------------------------------------------------
-# Quelle 1: APT/dpkg
-get_apt_apps() {
-    if command -v dpkg >/dev/null 2>&1; then
-        dpkg --get-selections 2>/dev/null | awk '{print $1}'
-    fi
-}
-
-# Quelle 2: SNAP
-get_snap_apps() {
-    if command -v snap >/dev/null 2>&1; then
-        snap list 2>/dev/null | awk 'NR>1 {print $1}'
-    fi
-}
-
-# Quelle 3: Flatpak
-get_flatpak_apps() {
-    if command -v flatpak >/dev/null 2>&1; then
-        flatpak list --columns=application 2>/dev/null
-    fi
-}
-
-# Alle Executables im PATH (für --all)
-get_path_apps() {
-    old_ifs=$IFS
-    IFS=:
-    for dir in $PATH; do
-        [ -d "$dir" ] || continue
-        for f in "$dir"/*; do
-            [ -f "$f" ] || continue
-            [ -x "$f" ] || continue
-            basename "$f"
-        done
-    done 2>/dev/null
-    IFS=$old_ifs
-}
-
-# ---------------------------------------------------------
-# Uninstall
-do_uninstall() {
-    if [ -f "$CONFIG_FILE" ]; then
-        . "$CONFIG_FILE"
-    fi
-
-    echo "Uninstalling searchapps..."
-
-    if [ -n "$SEARCHAPPS_BIN" ] && [ -f "$SEARCHAPPS_BIN" ]; then
-        rm -f "$SEARCHAPPS_BIN"
-        echo "Removed executable: $SEARCHAPPS_BIN"
-    fi
-
-    if [ -d "$SEARCHAPPS_DIR" ]; then
-        rm -rf "$SEARCHAPPS_DIR"
-        echo "Removed directory: $SEARCHAPPS_DIR"
-    fi
-
-    exit 0
-}
-
-# ---------------------------------------------------------
-# Argument Handling: Optionen zuerst
-
-case "$1" in
-    --uninstall)
-        do_uninstall
-        ;;
-    --help|-h)
-        cat <<EOF
-searchapps - list/search installed apt/snap/flatpak applications
+show_help() {
+  cat <<'EOF'
+searchapps - search commands available in your shell / PATH (case-insensitive)
 
 Usage:
-  searchapps               # list all installed apps (apt/snap/flatpak)
-  searchapps <pattern>     # search installed apps
-  searchapps --all <pat>   # search ALL executables in your PATH
+  searchapps <query>
   searchapps --help
   searchapps --uninstall
+
+Examples:
+  searchapps ssh
+  searchapps python
 EOF
-        exit 0
-        ;;
-    --all)
-        shift
-        all_path_apps=$(get_path_apps | sort -u)
-        if [ -z "$1" ]; then
-            printf "%s\n" "$all_path_apps"
-        else
-            printf "%s\n" "$all_path_apps" | grep -iF "$1"
-        fi
-        exit 0
-        ;;
+}
+
+# Uninstall wird vom Installer-Wrapper/Tool unterstützt (siehe unten).
+# Das Tool selbst kann nur informieren; die Logik ist hier, damit "searchapps --uninstall"
+# funktioniert, wenn der Wrapper INSTALL_DIR setzt (oder config existiert).
+do_uninstall() {
+  # Priorität: SEARCHAPPS_DIR aus Umgebung, sonst config, sonst abbrechen
+  if [ -n "${SEARCHAPPS_DIR:-}" ] && [ -d "${SEARCHAPPS_DIR:-}" ]; then
+    INSTALL_DIR="$SEARCHAPPS_DIR"
+  elif [ -f "$HOME/.searchapps/config" ]; then
+    # shellcheck disable=SC1090
+    . "$HOME/.searchapps/config"
+    INSTALL_DIR="${SEARCHAPPS_DIR:-$HOME/.searchapps}"
+  else
+    echo "Cannot uninstall: install dir not found (missing SEARCHAPPS_DIR and config)." >&2
+    exit 1
+  fi
+
+  BIN_PATH="${SEARCHAPPS_BIN:-$HOME/.local/bin/searchapps}"
+
+  echo "Uninstalling searchapps..."
+  if [ -f "$BIN_PATH" ]; then
+    rm -f "$BIN_PATH"
+    echo "Removed: $BIN_PATH"
+  fi
+
+  if [ -d "$INSTALL_DIR" ]; then
+    rm -rf "$INSTALL_DIR"
+    echo "Removed: $INSTALL_DIR"
+  fi
+
+  echo "Done."
+}
+
+case "${1:-}" in
+  --help|-h)
+    show_help
+    exit 0
+    ;;
+  --uninstall)
+    do_uninstall
+    exit 0
+    ;;
+  "")
+    echo "Usage: searchapps <Suchbegriff>" >&2
+    exit 1
+    ;;
 esac
 
-# ---------------------------------------------------------
-# DATEN AUS PAKETMANAGERN SAMMELN
+query="$1"
 
-all_apps=$(
-    get_apt_apps
-    get_snap_apps
-    get_flatpak_apps
-)
-
-# Kein Argument → komplette Liste
-if [ -z "$1" ]; then
-    printf "%s\n" "$all_apps" | sort -u
-    exit 0
+# Best effort: compgen gibt's nur in bash. Wir versuchen mehrere Strategien.
+# 1) bash + compgen (beste Abdeckung)
+if command -v bash >/dev/null 2>&1; then
+  bash -lc 'compgen -c' 2>/dev/null | sort -u | grep -i -- "$query" && exit 0
+  exit 1
 fi
 
-# Mit Argument → Suche in Paket/App-Namen
-pattern=$1
-printf "%s\n" "$all_apps" | sort -u | grep -iF "$pattern"
+# 2) Fallback POSIX: PATH-Verzeichnisse durchsuchen (nur ausführbare Dateien)
+# (keine Aliases/Funktionen/Builtins)
+echo "$PATH" | tr ':' '\n' | while IFS= read -r d; do
+  [ -d "$d" ] || continue
+  # nur Dateien
+  for f in "$d"/*; do
+    [ -f "$f" ] || continue
+    [ -x "$f" ] || continue
+    basename "$f"
+  done
+done | sort -u | grep -i -- "$query"
