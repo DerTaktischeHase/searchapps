@@ -8,6 +8,16 @@ Die Suche erfolgt **case-insensitive** und basiert auf **Teilstrings**.
 
 ---
 
+## Installation
+
+Installiere `searchapps` mit einem einzigen Befehl:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/DerTaktischeHase/searchapps/main/install.sh | sh
+```
+
+---
+
 ## Was macht searchapps genau?
 
 `searchapps` durchsucht alle **in der aktuellen Shell bekannten Kommandos** und
@@ -39,16 +49,6 @@ Das trifft in der Praxis typischerweise auf folgende Installationsarten zu:
 > Hinweis:  
 > `searchapps` sucht nach **Kommandos**, nicht nach grafischen Anwendungen oder
 > `.desktop`-Einträgen.
-
----
-
-## Installation
-
-Installiere `searchapps` mit einem einzigen Befehl:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/DerTaktischeHase/searchapps/main/install.sh | sh
-```
 
 ---
 
